@@ -1,0 +1,6 @@
+# Test bodies are single-quoted on purpose: they are shell source that gets
+# expanded inside the container by the container's own bash, not by the harness.
+disable=SC2016
+
+source-path=SCRIPTDIR
+external-sources=true

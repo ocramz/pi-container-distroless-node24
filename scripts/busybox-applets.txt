@@ -1,0 +1,143 @@
+# Busybox applets linked into the image.
+#
+# One applet name per line; blank lines and #-comments ignored.
+# collect-rootfs.sh validates every name against `busybox --list` and fails the
+# build on an unknown one, so this file cannot silently rot.
+#
+# Deliberately NOT here: bash, git, rg, fd, node, npm, tsc -- those are real
+# binaries shipped alongside busybox and must not be shadowed by an applet.
+#
+# Also deliberately NOT here, though busybox provides them: su, login, passwd,
+# mount, umount, chroot, dpkg, rpm, insmod, modprobe, init, reboot, poweroff,
+# ifconfig, ip, route, telnetd, httpd, crond, syslogd. An agent sandbox has no
+# use for privileged, daemon or network-configuration applets, and leaving them
+# out is most of the point of an allowlist over `busybox --install`.
+
+# shell + core file handling
+sh
+ash
+pwd
+ls
+cat
+cp
+mv
+rm
+rmdir
+mkdir
+mkfifo
+ln
+link
+unlink
+chmod
+chown
+chgrp
+touch
+stat
+readlink
+realpath
+basename
+dirname
+mktemp
+sync
+truncate
+shred
+df
+du
+
+# text
+head
+tail
+sort
+uniq
+wc
+cut
+tr
+sed
+awk
+grep
+egrep
+fgrep
+nl
+tac
+rev
+fold
+paste
+expand
+unexpand
+dos2unix
+unix2dos
+tee
+yes
+cmp
+diff
+patch
+ed
+strings
+hexdump
+od
+xxd
+base64
+md5sum
+sha1sum
+sha256sum
+sha512sum
+less
+more
+vi
+
+# process / environment
+env
+echo
+printf
+true
+false
+test
+expr
+seq
+shuf
+factor
+bc
+dc
+nproc
+getopt
+which
+id
+whoami
+groups
+hostname
+uname
+tty
+stty
+clear
+date
+sleep
+usleep
+timeout
+setsid
+ionice
+ps
+top
+kill
+killall
+pidof
+logname
+uptime
+free
+time
+watch
+
+# find / archives / net
+find
+xargs
+tar
+cpio
+gzip
+gunzip
+zcat
+bzip2
+bunzip2
+xz
+unxz
+xzcat
+unzip
+wget

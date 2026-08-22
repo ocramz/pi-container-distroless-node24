@@ -1,0 +1,136 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck scripts/*.sh tests/*.sh
+
+  # Each architecture builds and tests on its own native runner: emulating an
+  # arm64 npm install under QEMU costs minutes and buys nothing here.
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        run: echo "PI_VERSION=$(make -s print-PI_VERSION)" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: make build TAG=ci-${{ matrix.arch }}
+
+      # The suite runs the image with --network=none against a mock model, so it
+      # needs no credentials and cannot flake on an upstream provider.
+      - name: Integration tests
+        run: make test TAG=ci-${{ matrix.arch }}
+
+      - name: Report size
+        run: make size TAG=ci-${{ matrix.arch }}
+
+      - name: Log in to ghcr.io
+        if: github.event_name == 'push'
+        run: podman login ghcr.io -u ${{ github.actor }} --password-stdin <<< "${{ secrets.GITHUB_TOKEN }}"
+
+      # Push per-architecture images addressed only by digest; the human-readable
+      # tags are attached to the manifest list in the next job.
+      - name: Push by digest
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          podman push --digestfile=digest.txt \
+            "$IMAGE:ci-${{ matrix.arch }}" \
+            "docker://$IMAGE:sha-${GITHUB_SHA:0:7}-${{ matrix.arch }}"
+          echo "pushed $(cat digest.txt)"
+
+      - name: Upload digest
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.arch }}
+          path: digest.txt
+          if-no-files-found: error
+
+  # Assemble the two per-arch digests into one multi-arch manifest list and give
+  # it its tags. Matrix jobs cannot share outputs, hence the digest artifacts.
+  manifest:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: digest-*
+          path: digests
+
+      - name: Compute tags
+        run: |
+          set -euo pipefail
+          tags="sha-${GITHUB_SHA:0:7}"
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            tags="$tags latest pi-$(make -s print-PI_VERSION)"
+          fi
+          case "$GITHUB_REF" in
+            refs/tags/*) tags="$tags ${GITHUB_REF_NAME}" ;;
+          esac
+          echo "TAGS=$tags" >> "$GITHUB_ENV"
+          echo "tags: $tags"
+
+      - name: Log in to ghcr.io
+        run: podman login ghcr.io -u ${{ github.actor }} --password-stdin <<< "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Create and push manifest
+        id: push
+        run: |
+          set -euo pipefail
+          podman manifest create list
+          for f in digests/digest-*/digest.txt; do
+            podman manifest add list "docker://$IMAGE@$(cat "$f")"
+          done
+          for tag in $TAGS; do
+            podman manifest push --all --digestfile=manifest-digest.txt \
+              list "docker://$IMAGE:$tag"
+          done
+          echo "digest=$(cat manifest-digest.txt)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true

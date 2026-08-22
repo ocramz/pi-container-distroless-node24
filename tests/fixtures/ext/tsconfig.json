@@ -1,0 +1,27 @@
+{
+  "//": [
+    "Type-checking configuration for extension development inside the image.",
+    "Extensions need no node_modules at runtime -- Pi's jiti loader aliases",
+    "@earendil-works/* and typebox to its own copies -- but tsc still has to be",
+    "pointed at those copies. The two wildcard paths cover both the top level of",
+    "Pi's install prefix and its nested dependencies.",
+    "Copy this file next to your own extension and run `tsc --noEmit`."
+  ],
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": [],
+    "baseUrl": ".",
+    "paths": {
+      "*": [
+        "/opt/pi/lib/node_modules/*",
+        "/opt/pi/lib/node_modules/@earendil-works/pi-coding-agent/node_modules/*"
+      ]
+    }
+  },
+  "include": ["*.ts"]
+}
