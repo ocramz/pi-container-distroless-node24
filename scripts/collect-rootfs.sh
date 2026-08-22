@@ -80,7 +80,9 @@ declare -A canonical=()
 canonical["$(stat -c %i "$ROOT/usr/bin/git")"]="/usr/bin/git"
 dedup=0
 while IFS= read -r f; do
-	[ -f "$f" ] && [ ! -L "$f" ] || continue
+	if [ ! -f "$f" ] || [ -L "$f" ]; then
+		continue
+	fi
 	inode="$(stat -c %i "$f")"
 	target="${canonical[$inode]:-}"
 	if [ -z "$target" ]; then
